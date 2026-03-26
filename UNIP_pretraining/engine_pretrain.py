@@ -50,23 +50,32 @@ def train_one_epoch(model: torch.nn.Module, teacher: torch.nn.Module,
     if log_writer is not None:
         print('log_dir: {}'.format(log_writer.log_dir))
 
-    for data_iter_step, imgs in enumerate(metric_logger.log_every(data_loader, print_freq, remain_epochs, header)):
+    for data_iter_step, imgs_list in enumerate(metric_logger.log_every(data_loader, print_freq, remain_epochs, header)):
         # we use a per iteration (instead of per epoch) lr scheduler
+
+        [imgs, imgs_ir] = imgs_list
         if data_iter_step % accum_iter == 0:
             lr_sched.adjust_learning_rate(optimizer, data_iter_step / len(data_loader) + epoch, args)
 
         #samples = samples.to(device, non_blocking=True)
+        imgs_concat = torch.concatenate([imgs,imgs_ir],dim=0)
         B, C, H, W = imgs.shape
         N = B
         L = H // 16 * W // 16
 
         with torch.cuda.amp.autocast():
             with torch.no_grad():
-                teacher_qk = teacher(imgs.to(device, non_blocking=True))
-            qk_loss = model(imgs.to(device, non_blocking=True), teacher_qk)
-        
-        loss = qk_loss
-        loss_value = loss.item()
+                teacher_qk, var_rgbt = teacher(imgs_concat.to(device, non_blocking=True)) #11.29
+
+            qk_loss, qk_loss_rgbt = model(imgs_concat.to(device, non_blocking=True), teacher_qk,var_rgbt)  # 10.17
+            # student_ir_qk = model(imgs_ir.to(device, non_blocking=True), None, None)#10.17
+            # #teacher <-> student cross <-> modal
+            # qk_loss,qk_loss_rgbt = model(imgs.to(device, non_blocking=True), teacher_qk, student_ir_qk)#10.17
+
+
+        loss = qk_loss+qk_loss_rgbt
+        loss_value = loss.item() + qk_loss_rgbt.item()#*10
+        print('loss:',loss.item(),'qk_loss_rgbt:',qk_loss_rgbt.item())#*10)#10.17
 
         if not math.isfinite(loss_value):
             print(f"train loss: {qk_loss.item()}")
