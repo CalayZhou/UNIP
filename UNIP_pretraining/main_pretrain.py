@@ -79,7 +79,7 @@ def get_args_parser():
 
     parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
                         help='start epoch')
-    parser.add_argument('--num_workers', default=10, type=int)
+    parser.add_argument('--num_workers', default=4, type=int)
     parser.add_argument('--pin_mem', action='store_true',
                         help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.')
     parser.add_argument('--no_pin_mem', action='store_false', dest='pin_mem')
@@ -106,6 +106,10 @@ def get_args_parser():
     
     parser.add_argument('--last_heads', default=6, type=int,
                         help='the number of heads of the last layer of teacher')
+
+    parser.add_argument('--distill_layers', default=[  11], type=int, nargs='+',
+                        help='the number of layer to be distilled')#12.15 v3.7 calay
+
     parser.add_argument('--loss_type', default='KL', type=str)
     parser.add_argument('--clip_grad', default=None, type=float)
     
@@ -185,7 +189,8 @@ def main(args):
         dataset_train, sampler=sampler_train,
         batch_size=args.batch_size,
         num_workers=args.num_workers,
-        pin_memory=args.pin_mem,
+        pin_memory=False,#args.pin_mem,
+        #persistent_workers=True,
         drop_last=True,
     )
 
@@ -198,7 +203,7 @@ def main(args):
     teacher.eval()
 
 
-    model = models_unip.__dict__[args.model](last_heads=args.last_heads, loss_type=args.loss_type)
+    model = models_unip.__dict__[args.model](last_heads=args.last_heads, distill_layers=args.distill_layers, loss_type=args.loss_type)
     
     model.to(device)
     teacher.to(device)
@@ -254,7 +259,7 @@ def main(args):
             ema_teacher=ema_teacher if args.use_ema else None,
             momentum_schedule=momentum_schedule if args.use_ema else None
         )
-        if args.output_dir and (epoch % 20 == 0 or epoch + 1 == args.epochs):
+        if args.output_dir and (epoch % 5 == 0 or epoch + 1 == args.epochs):
             misc.save_model(
                 args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
                 loss_scaler=loss_scaler, epoch=epoch)
