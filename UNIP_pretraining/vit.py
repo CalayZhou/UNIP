@@ -44,11 +44,49 @@ class Attention(nn.Module):
         q, k, v = qkv[0], qkv[1], qkv[2] 
 
         if return_attention:
+
+            q_rgb, q_ir = q[:B//2,:,:,:],q[B//2:,:,:,:] # B H L C
+            k_rgb, k_ir = k[:B//2,:,:,:],k[B//2:,:,:,:] # C
+            
+            #attn_rgbt_q_rgb_k_rgb = (q_rgb @ k_rgb.transpose(-2, -1)) * self.scale
+            #attn_rgbt_q_ir_k_ir = (q_ir @ k_ir.transpose(-2, -1)) * self.scale
+            
+            #attn_rgbt_q_rgb_k_ir = (q_rgb @ k_ir.transpose(-2, -1)) * self.scale
+            #attn_rgbt_q_ir_k_rgb = (q_ir @ k_rgb.transpose(-2, -1)) * self.scale
+
+            attn_rgbt_q_rgb_k_rgb = (q_rgb @ k_rgb.transpose(-2, -1)) * self.scale # B H L C * # B H C L
+            attn_rgbt_q_rgb_k_ir = (q_rgb @ k_ir.transpose(-2, -1)) * self.scale
+
+
+            # attn_rgbt_q_ir_k_rgb = (q_ir @ k_rgb.transpose(-2, -1)) * self.scale
+            # attn_rgbt_q_ir_k_ir = (q_ir @ k_ir.transpose(-2, -1)) * self.scale
+
+
+            # attn_list1, attn_list2 = [],[]
+            #attn_list1.append(attn_rgbt_q_rgb_k_rgb)
+            #attn_list1.append(attn_rgbt_q_rgb_k_ir)
+            # attn_list1.append(attn_rgbt_q_rgb_k_rgb)
+            # attn_list1.append(attn_rgbt_q_ir_k_rgb)
+            #attn_list2.append(attn_rgbt_q_ir_k_ir)
+            #attn_list2.append(attn_rgbt_q_ir_k_rgb)
+            # attn_list2.append(attn_rgbt_q_rgb_k_ir)
+            # attn_list2.append(attn_rgbt_q_ir_k_ir)
+
+            #attn_rgbt_q_rgb_k_ir_softmax = attn_rgbt_q_rgb_k_ir.softmax(dim=-1)
+            #attn_rgbt_q_ir_k_rgb_softmax = attn_rgbt_q_ir_k_rgb.softmax(dim=-1)
+            
+            '''
             attn = (q @ k.transpose(-2, -1)) * self.scale
             qk = (q @ k.transpose(-2, -1)) * self.scale / temperature
             attn = attn.softmax(dim=-1)
+            #attn_softmax_qk = attn
             attn = self.attn_drop(attn)
             x = (attn @ v).transpose(1, 2).reshape(B, N, C)
+            '''
+            qk = (q @ k.transpose(-2, -1)) * self.scale / temperature
+            with torch.backends.cuda.sdp_kernel(enable_math=False):
+                x = F.scaled_dot_product_attention(q, k, v, dropout_p=self.drop_rate)
+                x = x.transpose(1, 2).reshape(B, N, C)
         else:
             # use flash attention for speeding up training
             with torch.backends.cuda.sdp_kernel(enable_math=False): 
@@ -59,7 +97,7 @@ class Attention(nn.Module):
         x = self.proj_drop(x)
         
         if return_attention:
-            return x, qk
+            return x, qk, attn_rgbt_q_rgb_k_rgb, attn_rgbt_q_rgb_k_ir#attn_list1, attn_list2 #attn_rgbt_q_rgb_k_ir,attn_rgbt_q_ir_k_rgb
         return x
 
 
@@ -80,7 +118,7 @@ class Block(nn.Module):
 
     def forward(self, x, return_attention=False, temperature=1.0):
         if return_attention:
-            tmp_x, qk = self.attn(self.norm1(x), return_attention=True, temperature=temperature)
+            tmp_x, attn_softmax_qk, attn_rgbt_q_rgb_k_ir_softmax,attn_rgbt_q_ir_k_rgb_softmax = self.attn(self.norm1(x), return_attention=True, temperature=temperature)
             x = x + self.drop_path(tmp_x)
         else:
             x = x + self.drop_path(self.attn(self.norm1(x)))
@@ -88,7 +126,7 @@ class Block(nn.Module):
         x = x + self.drop_path(self.mlp(self.norm2(x)))
         
         if return_attention:
-            return x, qk
+            return x, attn_softmax_qk, attn_rgbt_q_rgb_k_ir_softmax,attn_rgbt_q_ir_k_rgb_softmax
         return x
     
 
