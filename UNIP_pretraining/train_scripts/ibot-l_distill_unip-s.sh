@@ -1,13 +1,14 @@
-CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch  --nproc_per_node 2 --master_port 29590 main_pretrain.py \
-    --batch_size 256 --accum_iter 8 --epochs 100 --warmup_epochs 5 --blr 1.5e-4 --weight_decay 0.05 --pin_mem \
+torchrun   --nproc_per_node 4 --master_port 29591 main_pretrain_quick.py \
+    --batch_size 256 --accum_iter 4 --epochs 100 --warmup_epochs 5 --blr 1.5e-4 --weight_decay 0.05 --pin_mem \
     --model unip_vit_small_patch16 --last_heads 16  \
-    --infpre_path /path/to/infpre \
-    --in1k_path /path/to/in1k \
-    --coco_path /path/to/coco \
-    --use_coco --use_in1k --per_cls_num 200 --rgb_gray \
-    --teacher_path /path/to/ibot-large/checkpoint \
+    --infpre_path /projects/calayssd/DATASET/RGBT_ALL/ \
+    --in1k_path /projects/calayssd/DATASET//ImageNet-1K/train/ \
+    --coco_path /projects/calayssd/DATASET/COCO/ \
+    --use_coco --use_in1k --per_cls_num 200 \
+    --resume ../mae_large_layer18_distill_unip_small_100ep_infmix_6000ada/checkpoint-65.pth \
+    --start_epoch 65 \
+    --teacher_path /projects/calayssd/unip/UNIP_MODEL/mae_pretrain_vit_large.pth \
     --teacher_model vit_large \
-    --intermediate 21 \
-    --use_dino \
-    --output_dir=/your_output_dir/ibot_large_layer21_distill_unip_small_100ep_infmix \
-    --log_dir=/your_log_dir/ibot_large_layer21_distill_unip_small_100ep_infmix
+    --intermediate 18 \
+    --output_dir=../mae_large_layer18_distill_unip_small_100ep_infmix_6000ada \
+    --log_dir=../mae_large_layer18_distill_unip_small_100ep_infmix_6000ada
